@@ -21,7 +21,7 @@ const getOAuthURL = (platform) => {
   }
 };
 
-// GET /auth/instagram/verify — verify Instagram token and save to DB
+// GET /auth/instagram/verify
 router.get("/instagram/verify", async (req, res) => {
   try {
     const token    = process.env.INSTAGRAM_ACCESS_TOKEN;
@@ -78,14 +78,19 @@ router.get("/callback/:platform", async (req, res) => {
 
   if (!code) {
     return res.send(`
-      <script>
-        window.opener.postMessage(
-          { type: "OAUTH_ERROR", platform: "${platform}" },
-          "http://localhost:5173"
-        );
-        window.close();
-      </script>
-      <p>Error: No code received</p>
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage(
+                { type: "OAUTH_ERROR", platform: "${platform}" },
+                "*"
+              );
+            }
+            window.close();
+          </script>
+        </body>
+      </html>
     `);
   }
 
@@ -108,18 +113,26 @@ router.get("/callback/:platform", async (req, res) => {
 
     console.log(`✅ ${platform} connected and saved to database!`);
 
+    // ← KEY FIX: redirect to frontend success page directly
+    const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
     res.send(`
       <html>
         <body>
           <p>✅ ${platform} connected! Closing...</p>
           <script>
-            if (window.opener) {
-              window.opener.postMessage(
-                { type: "OAUTH_SUCCESS", platform: "${platform}" },
-                "*"
-              );
+            function sendAndClose() {
+              if (window.opener) {
+                window.opener.postMessage(
+                  { type: "OAUTH_SUCCESS", platform: "${platform}" },
+                  "*"
+                );
+                setTimeout(() => window.close(), 1000);
+              } else {
+                window.location.href = "${FRONTEND_URL}/success/${platform}";
+              }
             }
-            setTimeout(() => window.close(), 500);
+            sendAndClose();
           </script>
         </body>
       </html>
@@ -128,14 +141,20 @@ router.get("/callback/:platform", async (req, res) => {
   } catch (err) {
     console.error(`❌ Failed to save ${platform} connection:`, err.message);
     res.send(`
-      <script>
-        window.opener.postMessage(
-          { type: "OAUTH_ERROR", platform: "${platform}" },
-          "http://localhost:5173"
-        );
-        window.close();
-      </script>
-      <p>Error saving connection</p>
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage(
+                { type: "OAUTH_ERROR", platform: "${platform}" },
+                "*"
+              );
+            }
+            window.close();
+          </script>
+          <p>Error saving connection</p>
+        </body>
+      </html>
     `);
   }
 });
